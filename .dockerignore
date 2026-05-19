@@ -1,0 +1,11 @@
+.git
+.venv
+__pycache__/
+*.py[cod]
+reports/
+reports_cli_test/
+uploads/
+web/node_modules/
+web/dist/
+.DS_Store
+Proyecto Final.pdf

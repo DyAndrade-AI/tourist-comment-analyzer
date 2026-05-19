@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+reports/
+reports_cli_test/
+reports_advanced_test/
+reports_wordcloud_test/
+reports_bertopic_test/
+uploads/
+.DS_Store
+web/node_modules/
+web/dist/
