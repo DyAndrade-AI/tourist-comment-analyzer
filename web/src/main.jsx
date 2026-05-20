@@ -401,13 +401,27 @@ function topicMapOption(records) {
 }
 
 function priceMapOption(records) {
+  const data = records.map((row, index) => {
+    const similarity = numeric(row.price_similarity);
+    return [
+      numeric(row.price_x, Math.cos(index) * 0.01),
+      numeric(row.price_y, Math.sin(index) * 0.01),
+      similarity,
+      row.comment || "",
+      row.sentiment || "sin sentimiento",
+    ];
+  });
+  const visibleData = spreadCollapsedPoints(data);
+  const maxSimilarity = Math.max(0.1, ...visibleData.map((row) => row[2]));
+
   return {
     ...baseOption(),
-    grid: { left: 32, right: 16, top: 16, bottom: 26 },
+    grid: { left: 38, right: 54, top: 18, bottom: 30 },
     visualMap: {
+      dimension: 2,
       min: 0,
-      max: Math.max(0.1, ...records.map((row) => Number(row.price_similarity || 0))),
-      right: 4,
+      max: maxSimilarity,
+      right: 6,
       top: 18,
       itemWidth: 10,
       itemHeight: 110,
@@ -419,14 +433,10 @@ function priceMapOption(records) {
     series: [
       {
         type: "scatter",
-        symbolSize: (value) => 9 + value[2] * 42,
-        data: records.map((row) => [
-          Number(row.price_x || 0),
-          Number(row.price_y || 0),
-          Number(row.price_similarity || 0),
-          row.comment,
-          row.sentiment,
-        ]),
+        dimensions: ["x", "y", "similarity", "comment", "sentiment"],
+        encode: { x: 0, y: 1, tooltip: [2, 3, 4] },
+        symbolSize: (value) => 10 + numeric(value[2]) * 44,
+        data: visibleData,
         itemStyle: { borderColor: "#fff", borderWidth: 1.3, shadowBlur: 7, shadowColor: "rgba(15,23,42,.16)" },
       },
     ],
@@ -435,6 +445,32 @@ function priceMapOption(records) {
       formatter: (params) => `<b>${params.value[4]}</b><br/>Similitud: ${params.value[2].toFixed(3)}<br/>${params.value[3]}`,
     },
   };
+}
+
+function numeric(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function spreadCollapsedPoints(data) {
+  if (data.length < 2) return data;
+  const xs = data.map((row) => row[0]);
+  const ys = data.map((row) => row[1]);
+  const sameX = Math.max(...xs) - Math.min(...xs) < 0.000001;
+  const sameY = Math.max(...ys) - Math.min(...ys) < 0.000001;
+  if (!sameX || !sameY) return data;
+
+  return data.map((row, index) => {
+    const angle = (Math.PI * 2 * index) / data.length;
+    const radius = 0.04 + numeric(row[2]) * 0.08;
+    return [
+      Math.cos(angle) * radius,
+      Math.sin(angle) * radius,
+      row[2],
+      row[3],
+      row[4],
+    ];
+  });
 }
 
 function sentimentOption(metrics) {

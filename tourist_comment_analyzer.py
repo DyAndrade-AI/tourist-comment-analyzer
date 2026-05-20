@@ -131,6 +131,11 @@ PRICE_TERMS = {
     "fr": "prix valeur cout coût cher pas cher tarif argent budget vaut",
 }
 
+PRICE_TERM_SETS = {
+    language: set(terms.split())
+    for language, terms in PRICE_TERMS.items()
+}
+
 
 @dataclass
 class AnalysisResult:
@@ -534,6 +539,12 @@ def analyze_price_concept(frame: pd.DataFrame, language: str) -> pd.DataFrame:
     doc_matrix = matrix[:-1]
     concept_vector = matrix[-1]
     result["price_similarity"] = cosine_similarity(doc_matrix, concept_vector).ravel()
+    if float(result["price_similarity"].max()) == 0.0:
+        price_terms = PRICE_TERM_SETS.get(language, PRICE_TERM_SETS["en"])
+        result["price_similarity"] = result["tokens"].apply(
+            lambda tokens: min(1.0, sum(token in price_terms for token in tokens) / 3)
+            if isinstance(tokens, list) else 0.0
+        )
 
     if doc_matrix.shape[1] >= 2 and len(result) >= 2:
         normalized = normalize(doc_matrix)
