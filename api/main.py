@@ -50,7 +50,7 @@ def sample_csv() -> FileResponse:
 async def analyze(
     file: UploadFile = File(...),
     text_column: str = Form(...),
-    language: str = Form("es"),
+    language: str = Form("auto"),
     report_title: str = Form("Reporte turistico"),
     palette: str = Form("cividis"),
     topics: int = Form(4),

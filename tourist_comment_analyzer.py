@@ -126,16 +126,10 @@ SENTIMENT_LEXICONS = {
 }
 
 PRICE_TERMS = {
-    "en": "price value cost expensive cheap fee worth money budget rate",
-    "es": "precio valor costo caro barato tarifa dinero presupuesto vale cuesta",
-    "fr": "prix valeur cout coût cher pas cher tarif argent budget vaut",
+    "en": "price value cost expensive cheap fee worth money budget rate priced pricing euros dollars bill paid pay",
+    "es": "precio valor costo caro barato tarifa dinero presupuesto vale cuesta euros dolares cuenta pagado pagar",
+    "fr": "prix valeur cout coût cher pas cher tarif argent budget vaut euros dollars facture paye payer",
 }
-
-PRICE_TERM_SETS = {
-    language: set(terms.split())
-    for language, terms in PRICE_TERMS.items()
-}
-
 
 @dataclass
 class AnalysisResult:
@@ -174,6 +168,18 @@ def strip_accents(text: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
+PRICE_TERM_SETS = {
+    language: set(terms.split())
+    for language, terms in PRICE_TERMS.items()
+}
+
+DISPLAY_STOPWORDS = {
+    strip_accents(word.lower())
+    for words in STOPWORDS.values()
+    for word in words
+}
+
+
 def get_stemmer(language: str) -> SnowballStemmer | None:
     snowball_language = LANGUAGE_MAP.get(language)
     if not snowball_language:
@@ -184,6 +190,24 @@ def get_stemmer(language: str) -> SnowballStemmer | None:
         return None
 
 
+def infer_language(texts: Iterable[str], requested_language: str) -> str:
+    requested_language = requested_language.lower().strip()
+    if requested_language in {"en", "es", "fr"}:
+        return requested_language
+
+    sample = " ".join(str(text) for text in list(texts)[:80]).lower()
+    tokens = re.findall(r"[a-záéíóúüñç]+", strip_accents(sample), flags=re.IGNORECASE)
+    if not tokens:
+        return "en"
+
+    scores = {
+        language: sum(token in {strip_accents(word.lower()) for word in words} for token in tokens)
+        for language, words in STOPWORDS.items()
+        if language in {"en", "es", "fr"}
+    }
+    return max(scores, key=scores.get) if scores else "en"
+
+
 def preprocess_text(text: str, language: str, stemmer: SnowballStemmer | None) -> tuple[str, list[str]]:
     text = str(text).lower()
     text = re.sub(r"https?://\S+|www\.\S+", " ", text)
@@ -191,7 +215,8 @@ def preprocess_text(text: str, language: str, stemmer: SnowballStemmer | None) -
     text = re.sub(r"\d+", " ", text)
     text = strip_accents(text)
     tokens = re.findall(r"[a-záéíóúüñç]+", text, flags=re.IGNORECASE)
-    stops = {strip_accents(w.lower()) for w in STOPWORDS.get(language, STOPWORDS["en"])}
+    language_stops = {strip_accents(w.lower()) for w in STOPWORDS.get(language, STOPWORDS["en"])}
+    stops = DISPLAY_STOPWORDS | language_stops
     clean_tokens = [token for token in tokens if len(token) > 2 and token not in stops]
     return " ".join(clean_tokens), clean_tokens
 
@@ -730,7 +755,7 @@ def analyze_csv(
     min_topic_docs: int = 8,
     enable_bertopic: bool = False,
 ) -> AnalysisResult:
-    language = language.lower().strip()
+    requested_language = language.lower().strip()
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
@@ -738,8 +763,9 @@ def analyze_csv(
     if text_column not in df.columns:
         raise ValueError(f"Column '{text_column}' not found. Available columns: {', '.join(df.columns)}")
 
-    stemmer = get_stemmer(language)
     comments = df[text_column].fillna("").astype(str)
+    language = infer_language(comments.tolist(), requested_language)
+    stemmer = get_stemmer(language)
     processed = comments.apply(lambda value: preprocess_text(value, language, stemmer))
 
     analysis = pd.DataFrame({

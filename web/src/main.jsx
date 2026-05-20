@@ -18,18 +18,31 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const palettes = ["cividis", "viridis", "plasma", "inferno", "magma", "plotly", "safe"];
 const topicColors = ["#0f766e", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a", "#0891b2", "#475569"];
 const stopwords = new Set([
+  "about", "after", "all", "also", "and", "are", "because", "been", "but", "can", "could",
+  "did", "does", "for", "from", "had", "has", "have", "here", "him", "his", "hotel", "its",
+  "just", "not", "our", "out", "place", "room", "she", "stay", "that", "the", "their",
+  "there", "they", "this", "too", "very", "was", "were", "with", "would", "you", "your",
   "algo", "ante", "antes", "como", "con", "cuando", "del", "desde", "donde", "durante", "ella",
   "ellas", "ellos", "era", "eran", "esa", "esas", "ese", "eso", "esos", "esta", "estaba",
   "estado", "estan", "estar", "este", "esto", "estos", "fue", "fueron", "habia", "hasta",
   "hotel", "las", "los", "mas", "muy", "nos", "para", "pero", "por", "que", "sin", "sobre",
   "son", "sus", "tambien", "tiene", "todo", "todos", "una", "unas", "uno", "unos",
+  "afin", "ainsi", "alors", "aucun", "aussi", "autre", "aux", "avec", "avoir", "ces",
+  "cet", "cette", "comme", "dans", "des", "elle", "elles", "est", "etre", "fait", "ils",
+  "les", "leur", "lui", "mais", "meme", "mes", "mon", "nos", "notre", "nous", "par",
+  "pas", "plus", "pour", "qui", "sont", "sur", "tres", "une", "vos", "votre", "vous",
+]);
+const priceTerms = new Set([
+  "price", "priced", "pricing", "value", "cost", "expensive", "cheap", "fee", "worth", "money",
+  "budget", "rate", "euros", "dollars", "bill", "paid", "pay", "precio", "valor", "costo",
+  "caro", "barato", "tarifa", "dinero", "presupuesto", "vale", "cuesta", "cuenta", "pagado", "pagar",
 ]);
 
 function App() {
   const [file, setFile] = useState(null);
   const [form, setForm] = useState({
     textColumn: "comentario",
-    language: "es",
+    language: "auto",
     title: "Reporte turistico",
     palette: "cividis",
     topics: 4,
@@ -127,6 +140,7 @@ function App() {
           <label>
             Idioma
             <select value={form.language} onChange={(event) => setForm({ ...form, language: event.target.value })}>
+              <option value="auto">AUTO</option>
               <option value="es">ES</option>
               <option value="en">EN</option>
               <option value="fr">FR</option>
@@ -409,42 +423,45 @@ function topicMapOption(records) {
 }
 
 function priceMapOption(records) {
-  const data = records.map((row, index) => {
-    const similarity = numeric(row.price_similarity);
-    return [
-      index + 1,
-      similarity,
-      similarity,
-      row.comment || "",
-      row.sentiment || "sin sentimiento",
-    ];
-  });
-  const maxSimilarity = Math.max(0.1, ...data.map((row) => row[2]));
+  const data = records
+    .map((row, index) => {
+      const similarity = Math.max(numeric(row.price_similarity), priceScore(row.comment));
+      return {
+        value: similarity,
+        comment: row.comment || "",
+        sentiment: row.sentiment || "sin sentimiento",
+        itemStyle: { color: sentimentColor(row.sentiment) },
+        originalIndex: index + 1,
+      };
+    })
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 12);
+  const maxSimilarity = Math.max(0.1, ...data.map((row) => row.value));
 
   return {
     ...baseOption(),
-    grid: { left: 42, right: 18, top: 18, bottom: 30 },
-    xAxis: { ...axis(), name: "Comentario", nameTextStyle: { color: "#64748b", fontSize: 10 } },
-    yAxis: { ...axis(), min: 0, max: maxSimilarity, name: "Similitud", nameTextStyle: { color: "#64748b", fontSize: 10 } },
+    grid: { left: 36, right: 18, top: 18, bottom: 58 },
+    xAxis: {
+      type: "category",
+      data: data.map((_, index) => String(index + 1)),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: "#94a3b8", fontSize: 10 },
+    },
+    yAxis: { ...axis(), min: 0, max: maxSimilarity },
     series: [
       {
-        type: "scatter",
-        dimensions: ["commentIndex", "similarityY", "similarity", "comment", "sentiment"],
-        encode: { x: 0, y: 1, tooltip: [2, 3, 4] },
-        symbolSize: (value) => 10 + numeric(value[2]) * 36,
+        type: "bar",
         data,
-        itemStyle: {
-          color: (params) => sentimentColor(params.value[4]),
-          borderColor: "#fff",
-          borderWidth: 1.3,
-          shadowBlur: 7,
-          shadowColor: "rgba(15,23,42,.16)",
-        },
+        barMaxWidth: 24,
+        itemStyle: { borderRadius: [6, 6, 0, 0] },
+        label: { show: true, position: "top", color: "#475569", fontSize: 10, formatter: ({ value }) => value.toFixed(2) },
       },
     ],
     tooltip: {
       ...tooltip(),
-      formatter: (params) => `<b>${params.value[4]}</b><br/>Similitud: ${params.value[2].toFixed(3)}<br/>${params.value[3]}`,
+      formatter: (params) =>
+        `<b>${params.data.sentiment}</b><br/>Comentario #${params.data.originalIndex}<br/>Similitud: ${params.data.value.toFixed(3)}<br/>${params.data.comment}`,
     },
   };
 }
@@ -458,6 +475,11 @@ function sentimentColor(sentiment) {
   if (sentiment === "negativo") return "#dc2626";
   if (sentiment === "outlier") return "#64748b";
   return "#0f766e";
+}
+
+function priceScore(text) {
+  const matches = tokenize(text).filter((token) => priceTerms.has(token)).length;
+  return Math.min(1, matches / 3);
 }
 
 function buildReadableClouds(records, fallbackClouds) {
