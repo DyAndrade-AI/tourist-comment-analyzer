@@ -99,7 +99,7 @@ h3 {
 
 .command-bar {
   display: grid;
-  grid-template-columns: minmax(150px, 1.15fr) auto minmax(110px, 0.8fr) minmax(150px, 1.2fr) 82px 96px 76px 88px auto;
+  grid-template-columns: minmax(150px, 1.15fr) auto minmax(110px, 0.8fr) minmax(150px, 1.2fr) 82px 96px 76px 88px 86px auto;
   gap: 8px;
   align-items: end;
   margin-bottom: 10px;
@@ -136,6 +136,27 @@ input:focus,
 select:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.toggle-field {
+  min-height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 9px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.toggle-field input {
+  width: 15px;
+  min-height: 15px;
+  padding: 0;
+  accent-color: #0f766e;
 }
 
 .drop-zone {

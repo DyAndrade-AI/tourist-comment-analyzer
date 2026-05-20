@@ -15,6 +15,7 @@ from tourist_comment_analyzer import SUPPORTED_PALETTES, analyze_csv, write_anal
 BASE_DIR = Path(__file__).resolve().parents[1]
 UPLOAD_DIR = BASE_DIR / "uploads"
 REPORT_DIR = BASE_DIR / "reports"
+MAX_RESPONSE_RECORDS = 2000
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -54,6 +55,7 @@ async def analyze(
     palette: str = Form("cividis"),
     topics: int = Form(4),
     min_topic_docs: int = Form(8),
+    use_bertopic: bool = Form(False),
 ) -> dict[str, object]:
     palette = palette.lower().strip()
     if palette not in SUPPORTED_PALETTES:
@@ -72,7 +74,7 @@ async def analyze(
         shutil.copyfileobj(file.file, target)
 
     try:
-        result = analyze_csv(upload_path, text_column, language, topics, min_topic_docs)
+        result = analyze_csv(upload_path, text_column, language, topics, min_topic_docs, use_bertopic)
         outputs = write_analysis_outputs(result, report_title, palette, output_dir)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -80,7 +82,8 @@ async def analyze(
     frame = result.frame.drop(columns=["tokens"], errors="ignore").copy()
     frame = frame.replace({float("inf"): None, float("-inf"): None})
     frame = frame.where(frame.notna(), None)
-    records = frame.to_dict(orient="records")
+    records_frame = frame.head(MAX_RESPONSE_RECORDS)
+    records = records_frame.to_dict(orient="records")
     top_price = (
         frame.sort_values("price_similarity", ascending=False)
         .head(5)[["comment", "price_similarity", "sentiment"]]
@@ -96,6 +99,8 @@ async def analyze(
             "positive": int((frame["sentiment"] == "positivo").sum()),
             "negative": int((frame["sentiment"] == "negativo").sum()),
         },
+        "records_limited": len(frame) > len(records_frame),
+        "records_returned": len(records),
         "topic_summaries": result.topic_summaries,
         "topic_diagnostics": result.topic_diagnostics,
         "outlier_ngrams": result.outlier_ngrams,

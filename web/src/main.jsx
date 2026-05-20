@@ -27,6 +27,7 @@ function App() {
     palette: "cividis",
     topics: 4,
     minTopicDocs: 8,
+    useBertopic: false,
   });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -64,6 +65,7 @@ function App() {
     body.append("palette", form.palette);
     body.append("topics", String(form.topics));
     body.append("min_topic_docs", String(form.minTopicDocs));
+    body.append("use_bertopic", String(form.useBertopic));
 
     setLoading(true);
     setError("");
@@ -153,6 +155,14 @@ function App() {
               onChange={(event) => setForm({ ...form, minTopicDocs: Number(event.target.value) })}
             />
           </label>
+          <label className="toggle-field">
+            <input
+              type="checkbox"
+              checked={form.useBertopic}
+              onChange={(event) => setForm({ ...form, useBertopic: event.target.checked })}
+            />
+            BERTopic
+          </label>
           <button className="primary-action" disabled={loading}>
             {loading ? <Loader2 className="spin" size={17} /> : <Sparkles size={17} />}
             {loading ? "Analizando" : "Analizar"}
@@ -202,7 +212,11 @@ function Dashboard({ result, charts }) {
       </div>
 
       <div className="dashboard-grid">
-        <ChartCard title="Mapa semantico" meta={`${result.records.length} comentarios`} className="map-card">
+        <ChartCard
+          title="Mapa semantico"
+          meta={result.records_limited ? `${result.records_returned} de ${result.metrics.total} comentarios` : `${result.records.length} comentarios`}
+          className="map-card"
+        >
           <ReactECharts option={charts.topics} className="chart chart-tall" notMerge lazyUpdate />
         </ChartCard>
         <ChartCard title="Precio / valor / costo" meta="similitud">

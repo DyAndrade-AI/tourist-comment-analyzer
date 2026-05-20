@@ -156,6 +156,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default="reports", help="Directory for generated files.")
     parser.add_argument("--min-topic-docs", type=int, default=8, help="Minimum docs needed to train topics.")
     parser.add_argument("--topics", type=int, default=4, help="Maximum number of topics per sentiment group.")
+    parser.add_argument("--bertopic", action="store_true", help="Enable BERTopic/UMAP candidate evaluation.")
     return parser.parse_args()
 
 
@@ -362,6 +363,7 @@ def topic_model(
     sentiment: str,
     max_topics: int,
     min_topic_docs: int,
+    enable_bertopic: bool = False,
 ) -> tuple[pd.DataFrame, list[dict[str, object]], list[dict[str, object]]]:
     result = frame.copy()
     result["topic_id"] = "frecuencia"
@@ -417,12 +419,12 @@ def topic_model(
         random_state=42,
     ).fit_transform(matrix)
 
-    nmf_model = NMF(n_components=topic_count, random_state=42, init="nndsvda", max_iter=800)
+    nmf_model = NMF(n_components=topic_count, random_state=42, init="nndsvda", max_iter=300)
     nmf_weights = nmf_model.fit_transform(matrix)
     nmf_labels = nmf_weights.argmax(axis=1)
     nmf_score = topic_silhouette(dense_projection, nmf_labels)
 
-    kmeans_model = KMeans(n_clusters=topic_count, n_init=25, random_state=42)
+    kmeans_model = KMeans(n_clusters=topic_count, n_init=10, random_state=42)
     kmeans_labels = kmeans_model.fit_predict(normalize(dense_projection))
     kmeans_score = topic_silhouette(dense_projection, kmeans_labels)
 
@@ -446,7 +448,7 @@ def topic_model(
             "keywords_by_topic": {},
         },
     ]
-    bertopic_result = bertopic_candidate(docs, matrix, terms, dense_projection, topic_count)
+    bertopic_result = bertopic_candidate(docs, matrix, terms, dense_projection, topic_count) if enable_bertopic else None
     if bertopic_result:
         candidates.append(bertopic_result)
     selected = max(candidates, key=lambda item: (item["silhouette"] * 0.78) + (item["balance"] * 0.22))
@@ -503,7 +505,7 @@ def topic_model(
             "balance": 0.0,
             "topics": 0,
             "selected": False,
-            "status": "not_available",
+            "status": "disabled" if not enable_bertopic else "not_available",
         })
     return result, summaries, diagnostics
 
@@ -719,6 +721,7 @@ def analyze_csv(
     language: str,
     max_topics: int = 4,
     min_topic_docs: int = 8,
+    enable_bertopic: bool = False,
 ) -> AnalysisResult:
     language = language.lower().strip()
     if not csv_path.exists():
@@ -758,7 +761,7 @@ def analyze_csv(
         part = normal[normal["sentiment"] == sentiment].copy()
         if part.empty:
             continue
-        modeled, summaries, diagnostics = topic_model(part, sentiment, max_topics, min_topic_docs)
+        modeled, summaries, diagnostics = topic_model(part, sentiment, max_topics, min_topic_docs, enable_bertopic)
         modeled_parts.append(modeled)
         topic_summaries.extend(summaries)
         topic_diagnostics.extend(diagnostics)
@@ -828,7 +831,14 @@ def main() -> int:
         return 2
 
     try:
-        result = analyze_csv(csv_path, args.text_column, args.language, args.topics, args.min_topic_docs)
+        result = analyze_csv(
+            csv_path,
+            args.text_column,
+            args.language,
+            args.topics,
+            args.min_topic_docs,
+            args.bertopic,
+        )
         outputs = write_analysis_outputs(result, args.report_title, palette, Path(args.output_dir))
     except (FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)

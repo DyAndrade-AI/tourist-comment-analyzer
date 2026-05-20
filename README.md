@@ -47,6 +47,12 @@ python tourist_comment_analyzer.py data/sample_reviews.csv comentario es "Report
   --min-topic-docs 8
 ```
 
+BERTopic/UMAP puede ser lento en equipos locales. El analisis rapido usa NMF y LSA-KMeans por defecto; para incluir BERTopic en la comparacion:
+
+```bash
+python tourist_comment_analyzer.py data/sample_reviews.csv comentario es "Reporte turistico" cividis --bertopic
+```
+
 ## Version web local
 
 Terminal 1:
@@ -69,7 +75,7 @@ Abrir:
 http://localhost:5173
 ```
 
-La pagina permite subir un CSV, configurar columna, idioma, titulo, paleta, numero de topicos y umbral minimo. Tambien incluye un boton para cargar el CSV de ejemplo.
+La pagina permite subir un CSV, configurar columna, idioma, titulo, paleta, numero de topicos y umbral minimo. Tambien incluye un boton para cargar el CSV de ejemplo y un selector para activar BERTopic solo cuando se necesite el analisis mas pesado.
 
 ## Docker
 
@@ -117,7 +123,7 @@ La version web tambien guarda reportes en `reports/<id_ejecucion>/` y permite de
 - N-gramas: unigramas, bigramas y trigramas calculados sobre comentarios atipicos.
 - Nube de palabras: frecuencias normalizadas de terminos procesados, separadas por grupo.
 - Sentimiento: clasificador lexicon-based offline para `es`, `en` y `fr`.
-- Topicos: motor hibrido offline que compara BERTopic, NMF y LSA-KMeans. BERTopic usa embeddings locales TF-IDF + SVD precomputados, UMAP y clustering local; el sistema selecciona el mejor por silueta coseno y balance de clusters. Si una particion es pequena, usa frecuencia de palabras.
+- Topicos: motor hibrido offline que compara NMF y LSA-KMeans en modo rapido. Opcionalmente puede incluir BERTopic con embeddings locales TF-IDF + SVD precomputados, UMAP y clustering local; el sistema selecciona el mejor por silueta coseno y balance de clusters. Si una particion es pequena, usa frecuencia de palabras.
 - Scatter plots: reduccion a 2D con `TruncatedSVD`; color y simbolo se usan como codificacion redundante.
 - Precio / valor / costo: similitud coseno entre comentarios y un concepto sintetico multilingue.
 
