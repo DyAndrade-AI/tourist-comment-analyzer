@@ -118,7 +118,7 @@ La version web tambien guarda reportes en `reports/<id_ejecucion>/` y permite de
 
 ## Metodologia
 
-- Limpieza: minusculas, eliminacion de URLs, correos, numeros, caracteres especiales, stopwords y stemming con SnowballStemmer.
+- Limpieza: minusculas, eliminacion de URLs, correos, numeros, caracteres especiales y stopwords. Se conservan palabras completas para que nubes de palabras, topicos y reportes sean legibles.
 - Outliers: `IsolationForest` sobre matriz TF-IDF.
 - N-gramas: unigramas, bigramas y trigramas calculados sobre comentarios atipicos.
 - Nube de palabras: frecuencias normalizadas de terminos procesados, separadas por grupo.

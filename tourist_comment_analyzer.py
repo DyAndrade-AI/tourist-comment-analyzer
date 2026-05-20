@@ -188,8 +188,6 @@ def preprocess_text(text: str, language: str, stemmer: SnowballStemmer | None) -
     tokens = re.findall(r"[a-záéíóúüñç]+", text, flags=re.IGNORECASE)
     stops = {strip_accents(w.lower()) for w in STOPWORDS.get(language, STOPWORDS["en"])}
     clean_tokens = [token for token in tokens if len(token) > 2 and token not in stops]
-    if stemmer:
-        clean_tokens = [stemmer.stem(token) for token in clean_tokens]
     return " ".join(clean_tokens), clean_tokens
 
 
@@ -201,8 +199,6 @@ def sentiment_score(tokens: Iterable[str], language: str, stemmer: SnowballStemm
 
     def normalize_lexicon(words: Iterable[str]) -> set[str]:
         clean_words = [strip_accents(word.lower()) for word in words]
-        if stemmer:
-            return {stemmer.stem(word) for word in clean_words}
         return set(clean_words)
 
     positives = normalize_lexicon(lexicon["positive"])
