@@ -17,6 +17,13 @@ import "./styles.css";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const palettes = ["cividis", "viridis", "plasma", "inferno", "magma", "plotly", "safe"];
 const topicColors = ["#0f766e", "#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a", "#0891b2", "#475569"];
+const stopwords = new Set([
+  "algo", "ante", "antes", "como", "con", "cuando", "del", "desde", "donde", "durante", "ella",
+  "ellas", "ellos", "era", "eran", "esa", "esas", "ese", "eso", "esos", "esta", "estaba",
+  "estado", "estan", "estar", "este", "esto", "estos", "fue", "fueron", "habia", "hasta",
+  "hotel", "las", "los", "mas", "muy", "nos", "para", "pero", "por", "que", "sin", "sobre",
+  "son", "sus", "tambien", "tiene", "todo", "todos", "una", "unas", "uno", "unos",
+]);
 
 function App() {
   const [file, setFile] = useState(null);
@@ -231,8 +238,8 @@ function Dashboard({ result, charts }) {
         <ChartCard title="Modelos evaluados" meta="BERTopic / NMF / LSA">
           <ReactECharts option={charts.model} className="chart chart-small" notMerge lazyUpdate />
         </ChartCard>
-        <WordCloudPanel clouds={result.word_clouds || {}} />
-        <TopicPanel topics={result.topic_summaries} />
+        <WordCloudPanel records={result.records || []} fallbackClouds={result.word_clouds || {}} />
+        <TopicPanel topics={result.topic_summaries} records={result.records || []} />
       </div>
 
       <div className="bottom-grid">
@@ -255,7 +262,7 @@ function ChartCard({ title, meta, className = "", children }) {
   );
 }
 
-function TopicPanel({ topics }) {
+function TopicPanel({ topics, records }) {
   return (
     <article className="card topic-panel">
       <div className="section-title">
@@ -268,7 +275,7 @@ function TopicPanel({ topics }) {
             <span className="topic-dot" style={{ background: topicColors[index % topicColors.length] }} />
             <div>
               <strong>{topic.topic}</strong>
-              <p>{topic.keywords}</p>
+              <p>{readableKeywords(topic.keywords, records)}</p>
             </div>
             <em>{Number(topic.quality || 0).toFixed(2)}</em>
           </div>
@@ -278,7 +285,8 @@ function TopicPanel({ topics }) {
   );
 }
 
-function WordCloudPanel({ clouds }) {
+function WordCloudPanel({ records, fallbackClouds }) {
+  const clouds = buildReadableClouds(records, fallbackClouds);
   const groups = [
     ["global", "Global"],
     ["positivo", "Positivo"],
@@ -404,40 +412,34 @@ function priceMapOption(records) {
   const data = records.map((row, index) => {
     const similarity = numeric(row.price_similarity);
     return [
-      numeric(row.price_x, Math.cos(index) * 0.01),
-      numeric(row.price_y, Math.sin(index) * 0.01),
+      index + 1,
+      similarity,
       similarity,
       row.comment || "",
       row.sentiment || "sin sentimiento",
     ];
   });
-  const visibleData = spreadCollapsedPoints(data);
-  const maxSimilarity = Math.max(0.1, ...visibleData.map((row) => row[2]));
+  const maxSimilarity = Math.max(0.1, ...data.map((row) => row[2]));
 
   return {
     ...baseOption(),
-    grid: { left: 38, right: 54, top: 18, bottom: 30 },
-    visualMap: {
-      dimension: 2,
-      min: 0,
-      max: maxSimilarity,
-      right: 6,
-      top: 18,
-      itemWidth: 10,
-      itemHeight: 110,
-      inRange: { color: ["#dbeafe", "#2dd4bf", "#f59e0b", "#dc2626"] },
-      textStyle: { color: "#64748b", fontSize: 10 },
-    },
-    xAxis: axis(),
-    yAxis: axis(),
+    grid: { left: 42, right: 18, top: 18, bottom: 30 },
+    xAxis: { ...axis(), name: "Comentario", nameTextStyle: { color: "#64748b", fontSize: 10 } },
+    yAxis: { ...axis(), min: 0, max: maxSimilarity, name: "Similitud", nameTextStyle: { color: "#64748b", fontSize: 10 } },
     series: [
       {
         type: "scatter",
-        dimensions: ["x", "y", "similarity", "comment", "sentiment"],
+        dimensions: ["commentIndex", "similarityY", "similarity", "comment", "sentiment"],
         encode: { x: 0, y: 1, tooltip: [2, 3, 4] },
-        symbolSize: (value) => 10 + numeric(value[2]) * 44,
-        data: visibleData,
-        itemStyle: { borderColor: "#fff", borderWidth: 1.3, shadowBlur: 7, shadowColor: "rgba(15,23,42,.16)" },
+        symbolSize: (value) => 10 + numeric(value[2]) * 36,
+        data,
+        itemStyle: {
+          color: (params) => sentimentColor(params.value[4]),
+          borderColor: "#fff",
+          borderWidth: 1.3,
+          shadowBlur: 7,
+          shadowColor: "rgba(15,23,42,.16)",
+        },
       },
     ],
     tooltip: {
@@ -452,25 +454,62 @@ function numeric(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function spreadCollapsedPoints(data) {
-  if (data.length < 2) return data;
-  const xs = data.map((row) => row[0]);
-  const ys = data.map((row) => row[1]);
-  const sameX = Math.max(...xs) - Math.min(...xs) < 0.000001;
-  const sameY = Math.max(...ys) - Math.min(...ys) < 0.000001;
-  if (!sameX || !sameY) return data;
+function sentimentColor(sentiment) {
+  if (sentiment === "negativo") return "#dc2626";
+  if (sentiment === "outlier") return "#64748b";
+  return "#0f766e";
+}
 
-  return data.map((row, index) => {
-    const angle = (Math.PI * 2 * index) / data.length;
-    const radius = 0.04 + numeric(row[2]) * 0.08;
-    return [
-      Math.cos(angle) * radius,
-      Math.sin(angle) * radius,
-      row[2],
-      row[3],
-      row[4],
-    ];
+function buildReadableClouds(records, fallbackClouds) {
+  if (!records.length) return fallbackClouds;
+  return {
+    global: cloudFromRecords(records),
+    positivo: cloudFromRecords(records.filter((row) => row.sentiment === "positivo")),
+    negativo: cloudFromRecords(records.filter((row) => row.sentiment === "negativo")),
+    outlier: cloudFromRecords(records.filter((row) => row.sentiment === "outlier")),
+  };
+}
+
+function cloudFromRecords(records) {
+  const counts = {};
+  records.forEach((row) => {
+    tokenize(row.comment).forEach((token) => {
+      counts[token] = (counts[token] || 0) + 1;
+    });
   });
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 55);
+  const max = entries[0]?.[1] || 1;
+  return entries.map(([term, count]) => ({ term, count, weight: count / max }));
+}
+
+function readableKeywords(keywords, records) {
+  const vocabulary = buildVocabulary(records);
+  return String(keywords || "")
+    .split(",")
+    .map((term) => term.trim().split(/\s+/).map((word) => expandStem(word, vocabulary)).join(" "))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function expandStem(word, vocabulary) {
+  if (word.length < 4) return word;
+  return vocabulary.find((candidate) => candidate.startsWith(word) && candidate.length > word.length) || word;
+}
+
+function buildVocabulary(records) {
+  const words = new Set();
+  records.forEach((row) => tokenize(row.comment).forEach((token) => words.add(token)));
+  return Array.from(words).sort((a, b) => a.length - b.length);
+}
+
+function tokenize(text) {
+  return stripAccents(String(text || "").toLowerCase())
+    .match(/[a-z]+/g)
+    ?.filter((token) => token.length > 2 && !stopwords.has(token)) || [];
+}
+
+function stripAccents(text) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function sentimentOption(metrics) {
